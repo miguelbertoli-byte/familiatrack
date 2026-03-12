@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1b2a">
+<title>FamiliaTrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --bg:#0d1b2a;--bg2:#112236;--surface:#16293d;--surface2:#1c3450;
+  --border:rgba(100,180,255,0.12);--accent:#4fc3f7;--accent2:#81d4fa;
+  --green:#69f0ae;--danger:#ff5252;--warn:#ffca28;--text:#e8f4fd;--muted:#6b8fa8;
+  --font:'Nunito',sans-serif;--mono:'JetBrains Mono',monospace;--r:16px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+/* SETUP */
+#setup{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 20px 40px;overflow-y:auto;gap:18px;}
+.setup-logo{text-align:center;padding-top:10px;}
+.logo-circles{position:relative;width:76px;height:76px;margin:0 auto 12px;}
+.lc{position:absolute;inset:0;border:2px solid var(--accent);border-radius:50%;animation:lc-pulse 2.4s ease-out infinite;}
+.lc:nth-child(2){animation-delay:.8s;opacity:.6;}.lc:nth-child(3){animation-delay:1.6s;opacity:.3;}
+@keyframes lc-pulse{0%{transform:scale(.2);opacity:1;}100%{transform:scale(1.8);opacity:0;}}
+.lc-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;background:var(--accent);border-radius:50%;box-shadow:0 0 20px var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;}
+.setup-logo h1{font-size:1.8rem;font-weight:900;color:var(--text);letter-spacing:-.5px;}
+.setup-logo h1 span{color:var(--accent);}
+.setup-logo p{font-size:.75rem;color:var(--muted);margin-top:3px;}
+.setup-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px 16px;width:100%;max-width:420px;}
+.setup-box h2{font-size:.9rem;font-weight:800;color:var(--accent2);margin-bottom:14px;}
+.field{margin-bottom:11px;}
+.field label{display:block;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.field input{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:var(--mono);font-size:.87rem;outline:none;transition:border-color .2s,box-shadow .2s;}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,195,247,.12);}
+.field input::placeholder{color:var(--muted);}
+.field-row{display:flex;gap:10px;}.field-row .field{flex:1;}
+.emoji-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
+.emoji-btn{width:40px;height:40px;background:var(--surface2);border:2px solid transparent;border-radius:10px;font-size:1.2rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;}
+.emoji-btn.selected{border-color:var(--accent);background:rgba(79,195,247,.15);box-shadow:0 0 10px rgba(79,195,247,.25);}
+.btn-connect{width:100%;padding:14px;background:var(--accent);border:none;border-radius:12px;color:var(--bg);font-family:var(--font);font-size:1rem;font-weight:800;cursor:pointer;margin-top:4px;transition:all .2s;box-shadow:0 4px 20px rgba(79,195,247,.3);}
+.btn-connect:active{transform:scale(.97);}
+.setup-note{font-size:.67rem;color:var(--muted);text-align:center;line-height:1.7;}
+.setup-note a{color:var(--accent);text-decoration:none;}
+
+/* MAIN APP */
+#app{display:none;flex-direction:column;height:100dvh;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.app-title{font-size:1rem;font-weight:900;letter-spacing:-.3px;}
+.app-title span{color:var(--accent);}
+.room-pill{background:rgba(79,195,247,.12);border:1px solid rgba(79,195,247,.25);border-radius:20px;padding:3px 10px;font-size:.67rem;font-weight:700;color:var(--accent);font-family:var(--mono);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.my-avatar{width:32px;height:32px;border-radius:50%;background:var(--surface2);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:1rem;}
+.battery-badge{font-family:var(--mono);font-size:.6rem;color:var(--green);background:rgba(105,240,174,.1);border:1px solid rgba(105,240,174,.2);border-radius:8px;padding:2px 6px;}
+.tabbar{display:flex;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;order:99;padding-bottom:max(env(safe-area-inset-bottom),16px);}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 4px;cursor:pointer;border:none;background:none;color:var(--muted);font-family:var(--font);font-size:.57rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;gap:3px;transition:color .2s;position:relative;}
+.tab .tab-icon{font-size:1.1rem;}
+.tab.active{color:var(--accent);}
+.tab.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:var(--accent);border-radius:0 0 4px 4px;}
+.tab-badge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--danger);color:white;font-size:.5rem;font-weight:800;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.content{flex:1;overflow:hidden;position:relative;}
+.page{position:absolute;inset:0;overflow-y:auto;display:none;flex-direction:column;}
+.page.active{display:flex;}
+
+/* MAP PAGE */
+#page-map{padding:0;}
+#main-map{width:100%;height:100%;flex:1;}
+.map-overlay{position:absolute;top:10px;left:10px;right:10px;z-index:1000;pointer-events:none;}
+.members-floating{display:flex;gap:7px;flex-wrap:wrap;pointer-events:all;}
+.member-float{display:flex;align-items:center;gap:5px;background:rgba(13,27,42,.9);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;transition:all .2s;}
+.member-float:active{border-color:var(--accent);}
+.member-float .mf-bat{font-family:var(--mono);font-size:.58rem;color:var(--green);}
+
+/* SIGNAL PAGE */
+#page-signal{padding:15px;gap:13px;align-items:center;}
+.checkin-bar{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;}
+.checkin-info{display:flex;flex-direction:column;gap:2px;}
+.checkin-label{font-size:.66rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.checkin-val{font-size:.86rem;font-weight:700;color:var(--green);font-family:var(--mono);}
+.btn-checkin{background:rgba(105,240,174,.1);border:1.5px solid var(--green);border-radius:10px;color:var(--green);font-family:var(--font);font-size:.76rem;font-weight:800;padding:8px 12px;cursor:pointer;transition:all .2s;}
+.btn-checkin:active{transform:scale(.95);}
+.sos-area{display:flex;flex-direction:column;align-items:center;gap:11px;}
+.sos-wrap{position:relative;width:185px;height:185px;}
+.sos-ring{position:absolute;inset:0;border:2px solid var(--danger);border-radius:50%;opacity:0;}
+.sos-wrap.pulsing .sos-ring{animation:sr 1.5s ease-out infinite;}
+.sos-wrap.pulsing .sos-ring:nth-child(2){animation-delay:.5s;}
+.sos-wrap.pulsing .sos-ring:nth-child(3){animation-delay:1s;}
+@keyframes sr{0%{transform:scale(.5);opacity:.9;}100%{transform:scale(1.7);opacity:0;}}
+.sos-btn{position:absolute;inset:18px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#2a0810,#130208);border:3px solid var(--danger);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:all .15s;box-shadow:0 0 40px rgba(255,82,82,.15),inset 0 0 20px rgba(255,82,82,.05);}
+.sos-btn:active,.sos-btn.pressing{transform:scale(.93);box-shadow:0 0 60px rgba(255,82,82,.4),inset 0 0 30px rgba(255,82,82,.1);}
+.sos-emoji{font-size:1.7rem;}.sos-label{font-size:1rem;font-weight:900;color:var(--danger);letter-spacing:.1em;}
+.sos-sub{font-size:.56rem;font-family:var(--mono);color:rgba(255,82,82,.5);letter-spacing:.08em;}
+.sos-hint{font-size:.7rem;color:var(--muted);text-align:center;}
+.quick-msgs{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px;}
+.quick-msgs h3{font-size:.7rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:9px;}
+.qm-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.qm-btn{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font-family:var(--font);font-size:.76rem;font-weight:700;cursor:pointer;text-align:left;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.qm-btn:active{transform:scale(.97);}
+.qm-btn.green{border-color:rgba(105,240,174,.25);}.qm-btn.green:active{background:rgba(105,240,174,.1);}
+.qm-btn.red{border-color:rgba(255,82,82,.25);}.qm-btn.red:active{background:rgba(255,82,82,.1);}
+.qm-btn.blue{border-color:rgba(79,195,247,.25);}.qm-btn.blue:active{background:rgba(79,195,247,.1);}
+.qm-btn.warn{border-color:rgba(255,202,40,.25);}.qm-btn.warn:active{background:rgba(255,202,40,.1);}
+.sent-box{width:100%;background:var(--surface);border:1px solid rgba(105,240,174,.15);border-radius:var(--r);padding:13px;display:none;}
+.sent-box.visible{display:block;}
+.sent-box h3{font-size:.7rem;font-weight:800;color:var(--green);letter-spacing:.08em;margin-bottom:7px;}
+.sent-reads{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+.sent-read-chip{background:rgba(105,240,174,.1);border:1px solid rgba(105,240,174,.2);border-radius:20px;padding:3px 10px;font-size:.68rem;font-weight:700;color:var(--green);}
+.sent-read-chip::before{content:'✓ ';}
+
+/* HISTORY PAGE */
+#page-history{padding:13px;gap:9px;}
+.history-header{display:flex;align-items:center;justify-content:space-between;}
+.history-header h2{font-size:.93rem;font-weight:800;}
+.btn-clear{background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--muted);font-size:.67rem;font-family:var(--font);cursor:pointer;}
+.hist-empty{text-align:center;padding:34px 20px;color:var(--muted);font-size:.8rem;}
+.hist-empty .he-icon{font-size:2rem;margin-bottom:8px;}
+.hist-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px;display:flex;gap:10px;animation:slide-in .25s ease;}
+@keyframes slide-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.hi-emoji{font-size:1.4rem;flex-shrink:0;}.hi-body{flex:1;min-width:0;}
+.hi-from{font-size:.81rem;font-weight:800;}.hi-msg{font-size:.73rem;color:var(--muted);margin-top:2px;}
+.hi-meta{display:flex;align-items:center;gap:7px;margin-top:5px;flex-wrap:wrap;}
+.hi-time{font-family:var(--mono);font-size:.6rem;color:var(--muted);}
+.hi-dist{font-family:var(--mono);font-size:.6rem;background:rgba(79,195,247,.1);border:1px solid rgba(79,195,247,.2);border-radius:8px;padding:1px 7px;color:var(--accent);}
+.btn-hist-map{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--accent2);font-size:.68rem;font-family:var(--font);cursor:pointer;flex-shrink:0;align-self:flex-start;}
+
+/* PLACES PAGE */
+#page-places{padding:13px;gap:11px;}
+.places-header{display:flex;align-items:center;justify-content:space-between;}
+.places-header h2{font-size:.93rem;font-weight:800;}
+.btn-add-place{background:rgba(79,195,247,.12);border:1.5px solid rgba(79,195,247,.3);border-radius:10px;padding:7px 12px;color:var(--accent);font-family:var(--font);font-size:.76rem;font-weight:700;cursor:pointer;}
+.place-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px;display:flex;align-items:center;gap:10px;animation:slide-in .25s ease;}
+.pi-icon{font-size:1.4rem;}.pi-body{flex:1;}
+.pi-name{font-size:.86rem;font-weight:800;}.pi-coords{font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-top:2px;}
+.btn-del-place{background:none;border:none;color:var(--muted);font-size:.95rem;cursor:pointer;padding:4px;}
+.btn-go-place{background:rgba(79,195,247,.1);border:1px solid rgba(79,195,247,.25);border-radius:8px;padding:5px 9px;color:var(--accent);font-size:.68rem;font-family:var(--font);cursor:pointer;}
+
+/* CHAT PAGE */
+#page-chat{display:none;flex-direction:column;padding:0;overflow:hidden;}
+#page-chat.active{display:flex;}
+.chat-messages{flex:1;overflow-y:auto;padding:11px 12px;display:flex;flex-direction:column;gap:7px;}
+.msg{max-width:78%;animation:slide-in .2s ease;}
+.msg.mine{align-self:flex-end;}.msg.theirs{align-self:flex-start;}
+.msg-bubble{padding:8px 12px;border-radius:16px;font-size:.84rem;line-height:1.4;word-break:break-word;}
+.msg.mine .msg-bubble{background:var(--accent);color:var(--bg);border-bottom-right-radius:4px;font-weight:600;}
+.msg.theirs .msg-bubble{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px;}
+.msg-meta{font-size:.58rem;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:4px;}
+.msg.mine .msg-meta{justify-content:flex-end;}
+.msg-sender{font-weight:700;color:var(--accent2);}
+.chat-date-sep{text-align:center;font-size:.6rem;color:var(--muted);font-family:var(--mono);padding:4px 0;}
+.chat-input-bar{display:flex;gap:8px;padding:9px 11px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;}
+.chat-input{flex:1;background:var(--surface);border:1.5px solid var(--border);border-radius:22px;padding:10px 15px;color:var(--text);font-family:var(--font);font-size:.86rem;outline:none;transition:border-color .2s;}
+.chat-input:focus{border-color:var(--accent);}
+.chat-input::placeholder{color:var(--muted);}
+.btn-send{width:42px;height:42px;background:var(--accent);border:none;border-radius:50%;color:var(--bg);font-size:1rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 4px 12px rgba(79,195,247,.3);}
+.btn-send:active{transform:scale(.9);}
+
+/* ALERT OVERLAY */
+.alert-overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(8px);z-index:500;display:none;align-items:center;justify-content:center;padding:18px;}
+.alert-overlay.visible{display:flex;animation:fade-in .2s ease;}
+@keyframes fade-in{from{opacity:0;}to{opacity:1;}}
+.alert-card{background:var(--surface);border:2px solid var(--danger);border-radius:22px;padding:21px 17px;width:100%;max-width:360px;box-shadow:0 0 80px rgba(255,82,82,.25);animation:pop-in .3s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;}
+@keyframes pop-in{from{transform:scale(.6) translateY(40px);opacity:0;}to{transform:scale(1) translateY(0);opacity:1;}}
+.alert-shimmer{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--danger),transparent);animation:shimmer 2s linear infinite;}
+@keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(100%);}}
+.alert-title{font-size:1.35rem;font-weight:900;color:var(--danger);text-align:center;text-shadow:0 0 20px var(--danger);margin-bottom:3px;}
+.alert-subtitle{text-align:center;color:var(--muted);font-size:.76rem;margin-bottom:13px;}
+.alert-subtitle strong{color:var(--text);}
+.alert-msg-box{background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.2);border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:.91rem;font-weight:700;text-align:center;color:var(--text);}
+.alert-dist-box{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;margin-bottom:12px;}
+.alert-dist-num{font-size:2.3rem;font-weight:900;color:var(--warn);line-height:1;font-family:var(--mono);text-shadow:0 0 20px var(--warn);}
+.alert-dist-unit{font-size:.66rem;color:var(--muted);font-family:var(--mono);letter-spacing:.1em;}
+.alert-coords{font-family:var(--mono);font-size:.66rem;color:var(--muted);text-align:center;margin-bottom:12px;line-height:1.8;}
+.alert-coords span{color:var(--accent2);}
+#alert-mini-map{width:100%;height:150px;border-radius:11px;overflow:hidden;border:1px solid var(--border);margin-bottom:12px;display:none;}
+.alert-actions{display:flex;flex-direction:column;gap:8px;}
+.btn-alert-map{background:none;border:1.5px solid rgba(79,195,247,.4);border-radius:10px;padding:11px;color:var(--accent);font-family:var(--font);font-size:.86rem;font-weight:700;cursor:pointer;}
+.btn-alert-map:active{background:rgba(79,195,247,.1);}
+.btn-alert-ack{background:var(--danger);border:none;border-radius:10px;padding:13px;color:white;font-family:var(--font);font-size:.93rem;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(255,82,82,.3);transition:all .15s;}
+.btn-alert-ack:active{transform:scale(.97);}
+
+/* ADD PLACE MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:400;display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.visible{display:flex;animation:fade-in .2s ease;}
+.modal-sheet{background:var(--surface);border:1px solid var(--border);border-radius:22px 22px 0 0;padding:19px 17px;width:100%;max-width:500px;animation:sheet-up .3s cubic-bezier(.34,1.2,.64,1);}
+@keyframes sheet-up{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.modal-sheet h3{font-size:.92rem;font-weight:800;margin-bottom:12px;}
+.modal-lbl{display:block;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;margin-top:11px;}
+.modal-inp{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:var(--mono);font-size:.86rem;outline:none;transition:border-color .2s;}
+.modal-inp:focus{border-color:var(--accent);}
+.modal-inp::placeholder{color:var(--muted);}
+.place-emoji-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
+.modal-actions{display:flex;gap:10px;margin-top:13px;}
+.btn-modal-cancel{flex:1;padding:12px;background:none;border:1.5px solid var(--border);border-radius:10px;color:var(--muted);font-family:var(--font);font-weight:700;cursor:pointer;}
+.btn-modal-ok{flex:2;padding:12px;background:var(--accent);border:none;border-radius:10px;color:var(--bg);font-family:var(--font);font-size:.91rem;font-weight:800;cursor:pointer;}
+.gps-info{font-size:.7rem;color:var(--green);margin-top:7px;font-family:var(--mono);}
+
+/* TOAST */
+.toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface2);border:1px solid var(--border);border-radius:30px;padding:9px 17px;font-size:.74rem;font-weight:700;color:var(--text);opacity:0;transition:all .3s;z-index:600;white-space:nowrap;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Leaflet dark */
+.leaflet-tile{filter:invert(1) hue-rotate(180deg) brightness(.75) saturate(1.3) contrast(1.1);}
+.leaflet-container{background:#0d1b2a;}
+.leaflet-control-attribution{display:none!important;}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="setup-logo">
+    <div class="logo-circles">
+      <div class="lc"></div><div class="lc"></div><div class="lc"></div>
+      <div class="lc-center">🏠</div>
+    </div>
+    <h1>Familia<span>Track</span></h1>
+    <p>Ubicación familiar en tiempo real</p>
+  </div>
+  <div class="setup-box">
+    <h2>🔧 Configuración</h2>
+    <div class="field-row">
+      <div class="field"><label>Tu nombre</label><input id="inp-name" type="text" placeholder="María..." maxlength="16" autocomplete="off"></div>
+      <div class="field"><label>Código de sala</label><input id="inp-room" type="text" placeholder="FAMILIA1" maxlength="16" autocomplete="off"></div>
+    </div>
+    <div class="field"><label>Contraseña de sala</label><input id="inp-pass" type="password" placeholder="Clave compartida por la familia..."></div>
+    <div class="field">
+      <label>Tu avatar</label>
+      <div class="emoji-grid" id="emoji-grid">
+        <button class="emoji-btn selected" onclick="selectEmoji(this,'👦')">👦</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'👧')">👧</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'👨')">👨</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'👩')">👩</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'👴')">👴</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'👵')">👵</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'🧒')">🧒</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'🐶')">🐶</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'⭐')">⭐</button>
+        <button class="emoji-btn" onclick="selectEmoji(this,'🦁')">🦁</button>
+      </div>
+    </div>
+    <div class="field"><label>Firebase Realtime DB URL</label><input id="inp-fb" type="text" placeholder="https://tu-proyecto.firebaseio.com" autocomplete="off"></div>
+    <button class="btn-connect" onclick="startApp()">Conectar →</button>
+  </div>
+  <div class="setup-note">Todos los miembros usan el mismo código y contraseña.<br><a href="https://console.firebase.google.com" target="_blank">Crear Firebase gratis →</a></div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="app-title">Familia<span>Track</span></div>
+      <div class="room-pill" id="hdr-room">—</div>
+    </div>
+    <div class="topbar-right">
+      <div class="battery-badge" id="hdr-battery">🔋—</div>
+      <div class="my-avatar" id="hdr-avatar">?</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="page active" id="page-map">
+      <div id="main-map"></div>
+      <div class="map-overlay"><div class="members-floating" id="members-floating"></div></div>
+    </div>
+    <div class="page" id="page-signal">
+      <div class="checkin-bar">
+        <div class="checkin-info">
+          <span class="checkin-label">⏱ Último check-in</span>
+          <span class="checkin-val" id="last-checkin">Sin check-in</span>
+        </div>
+        <button class="btn-checkin" onclick="doCheckin()">✓ Estoy bien</button>
+      </div>
+      <div class="sos-area">
+        <div class="sos-wrap" id="sos-wrap">
+          <div class="sos-ring"></div><div class="sos-ring"></div><div class="sos-ring"></div>
+          <button class="sos-btn" id="sos-btn" onpointerdown="sosDown()" onpointerup="sosUp()" onpointerleave="sosUp()">
+            <span class="sos-emoji">📡</span>
+            <span class="sos-label">SEÑAL</span>
+            <span class="sos-sub">MANTENER PARA ENVIAR</span>
+          </button>
+        </div>
+        <div class="sos-hint">Mantené presionado para enviar tu<br>ubicación a todos en la sala</div>
+      </div>
+      <div class="quick-msgs">
+        <h3>📢 Mensajes rápidos</h3>
+        <div class="qm-grid">
+          <button class="qm-btn green" onclick="sendQuick('✅ Estoy bien')">✅ Estoy bien</button>
+          <button class="qm-btn red" onclick="sendQuick('🆘 Necesito ayuda')">🆘 Necesito ayuda</button>
+          <button class="qm-btn blue" onclick="sendQuick('🚗 Vengan a buscarme')">🚗 Vengan a buscarme</button>
+          <button class="qm-btn warn" onclick="sendQuick('⏰ Estoy llegando')">⏰ Estoy llegando</button>
+          <button class="qm-btn green" onclick="sendQuick('🏫 Llegué a la escuela')">🏫 Llegué a la escuela</button>
+          <button class="qm-btn blue" onclick="sendQuick('🏠 Llegué a casa')">🏠 Llegué a casa</button>
+          <button class="qm-btn warn" onclick="sendQuick('😴 Me voy a dormir')">😴 Me voy a dormir</button>
+          <button class="qm-btn red" onclick="sendQuick('📍 ¿Dónde están?')">📍 ¿Dónde están?</button>
+        </div>
+      </div>
+      <div class="sent-box" id="sent-box">
+        <h3>📡 Tu última señal — confirmaciones</h3>
+        <div style="font-size:.74rem;color:var(--muted)" id="sent-msg-txt">—</div>
+        <div class="sent-reads" id="sent-reads"></div>
+      </div>
+    </div>
+    <div class="page" id="page-history">
+      <div class="history-header">
+        <h2>📋 Historial</h2>
+        <button class="btn-clear" onclick="clearHistory()">Limpiar</button>
+      </div>
+      <div id="history-list"><div class="hist-empty"><div class="he-icon">📭</div>Sin señales aún</div></div>
+    </div>
+    <div class="page" id="page-places">
+      <div class="places-header">
+        <h2>📍 Lugares</h2>
+        <button class="btn-add-place" onclick="openAddPlace()">+ Agregar</button>
+      </div>
+      <div id="places-list"><div class="hist-empty"><div class="he-icon">🗺</div>Guardá lugares como casa,<br>escuela o trabajo</div></div>
+    </div>
+    <div class="page" id="page-chat">
+      <div class="chat-messages" id="chat-messages"><div class="chat-date-sep">Hoy</div></div>
+      <div class="chat-input-bar">
+        <input class="chat-input" id="chat-input" placeholder="Escribí un mensaje..." maxlength="300" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn-send" onclick="sendChat()">➤</button>
+      </div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <button class="tab active" onclick="switchTab('map',0)"><span class="tab-icon">🗺</span>Mapa</button>
+    <button class="tab" onclick="switchTab('signal',1)"><span class="tab-icon">📡</span>Señal</button>
+    <button class="tab" onclick="switchTab('history',2)"><span class="tab-icon">📋</span>Historial<div class="tab-badge" id="hist-badge" style="display:none">0</div></button>
+    <button class="tab" onclick="switchTab('places',3)"><span class="tab-icon">📍</span>Lugares</button>
+    <button class="tab" onclick="switchTab('chat',4)"><span class="tab-icon">💬</span>Chat<div class="tab-badge" id="chat-badge" style="display:none">0</div></button>
+  </div>
+</div>
+
+<div class="alert-overlay" id="alert-overlay">
+  <div class="alert-card">
+    <div class="alert-shimmer"></div>
+    <div class="alert-title">🚨 SEÑAL RECIBIDA</div>
+    <div class="alert-subtitle">De: <strong id="al-from">—</strong></div>
+    <div class="alert-msg-box" id="al-msg">📡 Señal de ubicación</div>
+    <div class="alert-dist-box">
+      <div class="alert-dist-num" id="al-dist">—</div>
+      <div class="alert-dist-unit" id="al-unit">KM DE DISTANCIA</div>
+    </div>
+    <div class="alert-coords" id="al-coords">📍 Cargando...</div>
+    <div id="alert-mini-map"></div>
+    <div class="alert-actions">
+      <button class="btn-alert-map" onclick="toggleAlertMap()">🗺 Ver en mapa</button>
+      <button class="btn-alert-ack" onclick="ackAlert()">✓ Confirmar recepción</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="place-modal">
+  <div class="modal-sheet">
+    <h3>📍 Agregar lugar</h3>
+    <label class="modal-lbl">Nombre</label>
+    <input class="modal-inp" id="place-name-inp" type="text" placeholder="Casa, Escuela, Trabajo...">
+    <label class="modal-lbl">Ícono</label>
+    <div class="place-emoji-grid" id="place-emoji-grid">
+      <button class="emoji-btn selected" onclick="selectPlaceEmoji(this,'🏠')">🏠</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'🏫')">🏫</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'💼')">💼</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'🏥')">🏥</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'⛪')">⛪</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'🏋️')">🏋️</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'🛒')">🛒</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'⚽')">⚽</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'🌳')">🌳</button>
+      <button class="emoji-btn" onclick="selectPlaceEmoji(this,'📍')">📍</button>
+    </div>
+    <div class="gps-info" id="place-gps-info">📡 Usará tu ubicación GPS actual</div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeAddPlace()">Cancelar</button>
+      <button class="btn-modal-ok" onclick="savePlace()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let myName='',myRoom='',myEmoji='👦',myId='';
+let myLat=null,myLng=null,gpsReady=false;
+let db=null,presenceRef=null;
+let mainMap=null,alertMapInst=null,alertMapVisible=false;
+let mapMarkers={},placeMarkers=[];
+let currentAlertData=null,currentAlertSignalId=null;
+let selectedEmoji='👦',selectedPlaceEmoji='🏠';
+let historyItems=[],unreadChat=0,unreadHist=0,activeTab='map';
+let sosHoldTimer=null,sosHolding=false,batteryLevel=null,places=[];
+
+function selectEmoji(btn,emoji){document.querySelectorAll('#emoji-grid .emoji-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');selectedEmoji=emoji;}
+function selectPlaceEmoji(btn,emoji){document.querySelectorAll('#place-emoji-grid .emoji-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');selectedPlaceEmoji=emoji;}
+
+function startApp(){
+  const name=document.getElementById('inp-name').value.trim();
+  const room=document.getElementById('inp-room').value.trim().toUpperCase();
+  const pass=document.getElementById('inp-pass').value.trim();
+  const fbUrl=document.getElementById('inp-fb').value.trim();
+  if(!name)return toast('Ingresá tu nombre');
+  if(!room)return toast('Ingresá el código de sala');
+  if(!pass)return toast('Ingresá una contraseña');
+  if(!fbUrl||!fbUrl.includes('firebaseio'))return toast('URL de Firebase inválida');
+  myName=name;myEmoji=selectedEmoji;
+  myId=name+'_'+Math.random().toString(36).substr(2,6);
+  myRoom=room; // sala = código exacto, sin hash
+  try{const fbApp=firebase.initializeApp({databaseURL:fbUrl},myId);db=firebase.database(fbApp);}
+  catch(e){return toast('Error Firebase: '+e.message);}
+  localStorage.setItem('ft_name',name);localStorage.setItem('ft_room',room);
+  localStorage.setItem('ft_pass',pass);localStorage.setItem('ft_emoji',myEmoji);localStorage.setItem('ft_fb',fbUrl);
+  const sp=localStorage.getItem('ft_places_'+myRoom);if(sp)places=JSON.parse(sp);
+  document.getElementById('setup').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('hdr-room').textContent=room;
+  document.getElementById('hdr-avatar').textContent=myEmoji;
+  initBattery();startGPS();setupPresence();listenMembers();listenSignals();listenChat();initMap();renderPlaces();setTimeout(()=>{initPushNotifications();listenPushQueue();},1500);
+}
+
+function simpleHash(s){let h=0;for(let i=0;i<s.length;i++)h=(Math.imul(31,h)+s.charCodeAt(i))|0;return Math.abs(h).toString(36).substr(0,8);}
+
+async function initBattery(){
+  if(!('getBattery'in navigator))return;
+  const bat=await navigator.getBattery();
+  batteryLevel=Math.round(bat.level*100);updateBatteryUI();
+  bat.addEventListener('levelchange',()=>{batteryLevel=Math.round(bat.level*100);updateBatteryUI();if(presenceRef)presenceRef.update({battery:batteryLevel});});
+}
+function updateBatteryUI(){
+  const icon=batteryLevel>60?'🔋':batteryLevel>20?'🪫':'❗';
+  document.getElementById('hdr-battery').textContent=icon+batteryLevel+'%';
+  if(presenceRef)presenceRef.update({battery:batteryLevel});
+}
+
+function startGPS(){
+  if(!navigator.geolocation)return toast('GPS no disponible');
+  navigator.geolocation.watchPosition(pos=>{
+    myLat=pos.coords.latitude;myLng=pos.coords.longitude;if(mainMap&&!gpsReady){gpsReady=true;mainMap.setView([myLat,myLng],15);}updateMyMarker();
+    if(presenceRef)presenceRef.update({lat:myLat,lng:myLng,ts:firebase.database.ServerValue.TIMESTAMP});
+  },err=>toast('GPS: activá el permiso de ubicación'),{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+}
+
+function setupPresence(){
+  // Use stable ID based on name only so reconnects don't create duplicates
+  myId = myName.replace(/\s+/g,'_').toLowerCase();
+  console.log('MyID:', myId, 'Room:', myRoom);
+  presenceRef=db.ref(`rooms/${myRoom}/members/${myId}`);
+  presenceRef.set({name:myName,emoji:myEmoji,lat:myLat,lng:myLng,battery:batteryLevel,online:true,ts:firebase.database.ServerValue.TIMESTAMP});
+  presenceRef.onDisconnect().remove();
+  // Debug: verify we can read back
+  db.ref(`rooms/${myRoom}/members`).once('value').then(s=>{
+    const m=s.val()||{};
+    console.log('Members in room:', Object.keys(m).join(', '));
+    toast('Sala: '+myRoom+' · Miembros: '+Object.keys(m).length);
+  });
+}
+
+function listenMembers(){
+  db.ref(`rooms/${myRoom}/members`).on('value',snap=>{
+    const members=snap.val()||{};
+    const floatDiv=document.getElementById('members-floating');
+    floatDiv.innerHTML='';
+
+    // Remove markers for members who left
+    Object.keys(mapMarkers).forEach(id=>{
+      if(!members[id]&&mainMap&&mapMarkers[id]){
+        mainMap.removeLayer(mapMarkers[id]);
+        delete mapMarkers[id];
+      }
+    });
+
+    for(const[id,m]of Object.entries(members)){
+      // Floating chip
+      const chip=document.createElement('div');
+      chip.className='member-float';
+      chip.innerHTML=`<span>${m.emoji||'👤'}</span><span>${m.name}</span>${m.battery?`<span class="mf-bat">${m.battery}%</span>`:''}`;
+      if(m.lat&&m.lng)chip.onclick=()=>{switchTab('map',0);centerMapOn(m.lat,m.lng);};
+      floatDiv.appendChild(chip);
+
+      // Map marker — skip myself, handled by updateMyMarker()
+      if(id===myId) continue;
+
+      if(mainMap&&m.lat&&m.lng){
+        const color='#4fc3f7';
+        const html=`<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center">
+          <div style="position:absolute;inset:0;border-radius:50%;background:rgba(79,195,247,0.2)"></div>
+          <div style="width:32px;height:32px;background:#0a1a2a;border-radius:50%;border:2.5px solid ${color};box-shadow:0 0 12px ${color};display:flex;align-items:center;justify-content:center;font-size:18px">${m.emoji||'👤'}</div>
+        </div>`;
+        const icon=L.divIcon({html,iconSize:[40,40],iconAnchor:[20,20],className:''});
+        if(mapMarkers[id]){
+          mapMarkers[id].setLatLng([m.lat,m.lng]).setIcon(icon);
+        } else {
+          mapMarkers[id]=L.marker([m.lat,m.lng],{icon}).addTo(mainMap)
+            .bindPopup(`${m.emoji||'👤'} <b>${m.name}</b>${m.battery?' — 🔋'+m.battery+'%':''}`);
+        }
+      }
+    }
+  });
+}
+
+function initMap(){
+  setTimeout(()=>{
+    mainMap=L.map('main-map',{zoomControl:false,attributionControl:false}).setView([-31.73,-60.53],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMap);
+    L.control.zoom({position:'bottomright'}).addTo(mainMap);
+    renderPlaceMarkersOnMap();
+  },200);
+}
+function centerMapOn(lat,lng){if(mainMap)mainMap.flyTo([lat,lng],16,{duration:1});}
+
+let myMarker=null;
+function updateMyMarker(){
+  if(!mainMap||!myLat||!myLng)return;
+  const html=`<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center"><div style="position:absolute;inset:0;border-radius:50%;background:rgba(105,240,174,0.2)"></div><div style="width:32px;height:32px;background:#0f2210;border-radius:50%;border:2.5px solid #69f0ae;box-shadow:0 0 12px #69f0ae;display:flex;align-items:center;justify-content:center;font-size:18px">`+( myEmoji||"👤")+`</div></div>`;
+  const icon=L.divIcon({html:html,iconSize:[40,40],iconAnchor:[20,20],className:""});
+  if(myMarker){myMarker.setLatLng([myLat,myLng]).setIcon(icon);}
+  else{myMarker=L.marker([myLat,myLng],{icon}).addTo(mainMap).bindPopup("<b>Yo ("+myName+")</b>");}
+}
+
+function sosDown(){sosHolding=true;document.getElementById('sos-btn').classList.add('pressing');sosHoldTimer=setTimeout(()=>{if(sosHolding)sendSignal('📡 Señal de ubicación');},800);}
+function sosUp(){sosHolding=false;document.getElementById('sos-btn').classList.remove('pressing');clearTimeout(sosHoldTimer);}
+
+function sendSignal(message){
+  if(!myLat||!myLng)return toast('⏳ Esperando GPS...');
+  const ref=db.ref(`rooms/${myRoom}/signals`).push();
+  ref.set({from:myName,fromId:myId,emoji:myEmoji,lat:myLat,lng:myLng,message,ts:firebase.database.ServerValue.TIMESTAMP,reads:{}});
+  document.getElementById('sos-wrap').classList.add('pulsing');
+  setTimeout(()=>document.getElementById('sos-wrap').classList.remove('pulsing'),5000);
+  toast('📡 Enviado: '+message);sendPushToRoom({name:myName,from:myName,message:message});
+  const sb=document.getElementById('sent-box');sb.classList.add('visible');
+  document.getElementById('sent-msg-txt').textContent=message;
+  document.getElementById('sent-reads').innerHTML='<span style="font-size:.7rem;color:var(--muted)">Esperando confirmaciones...</span>';
+  ref.child('reads').on('value',snap=>{
+    const reads=snap.val()||{};const row=document.getElementById('sent-reads');row.innerHTML='';
+    for(const[uid,r]of Object.entries(reads)){const chip=document.createElement('div');chip.className='sent-read-chip';chip.textContent=r.name;row.appendChild(chip);}
+    if(!Object.keys(reads).length)row.innerHTML='<span style="font-size:.7rem;color:var(--muted)">Sin confirmaciones aún...</span>';
+  });
+  addToHistory({from:myName,emoji:myEmoji,message,lat:myLat,lng:myLng,ts:Date.now(),mine:true});
+  if(navigator.vibrate)navigator.vibrate([100,50,100]);
+}
+function sendQuick(message){sendSignal(message);}
+
+function listenSignals(){
+  db.ref(`rooms/${myRoom}/signals`).limitToLast(10).on('child_added',snap=>{
+    const s=snap.val();const sid=snap.key;
+    if(s.fromId===myId)return;
+    const age=Date.now()-(s.ts||0);if(age>45000)return;
+    showAlert(s,sid);
+    const dist=(myLat&&myLng&&s.lat&&s.lng)?haversine(myLat,myLng,s.lat,s.lng):null;
+    addToHistory({from:s.from,emoji:s.emoji||'👤',message:s.message||'📡 Señal',lat:s.lat,lng:s.lng,ts:s.ts||Date.now(),mine:false,dist});
+  });
+}
+
+function showAlert(signal,signalId){
+  currentAlertData=signal;currentAlertSignalId=signalId;alertMapVisible=false;
+  document.getElementById('al-from').textContent=(signal.emoji||'')+' '+signal.from;
+  document.getElementById('al-msg').textContent=signal.message||'📡 Señal de ubicación';
+  if(myLat&&myLng&&signal.lat&&signal.lng){
+    const km=haversine(myLat,myLng,signal.lat,signal.lng);
+    if(km<1){document.getElementById('al-dist').textContent=Math.round(km*1000);document.getElementById('al-unit').textContent='METROS DE DISTANCIA';}
+    else{document.getElementById('al-dist').textContent=km.toFixed(2);document.getElementById('al-unit').textContent='KM DE DISTANCIA';}
+  }else{document.getElementById('al-dist').textContent='—';document.getElementById('al-unit').textContent='GPS NO DISPONIBLE';}
+  if(signal.lat&&signal.lng)document.getElementById('al-coords').innerHTML=`📍 Lat: <span>${signal.lat.toFixed(6)}</span> &nbsp; Lng: <span>${signal.lng.toFixed(6)}</span>`;
+  document.getElementById('alert-mini-map').style.display='none';document.getElementById('alert-mini-map').innerHTML='';alertMapInst=null;
+  document.getElementById('alert-overlay').classList.add('visible');
+  if(navigator.vibrate)navigator.vibrate([300,150,300,150,500]);
+  if(activeTab!=='history'){unreadHist++;showBadge('hist-badge',unreadHist);}
+}
+
+function toggleAlertMap(){
+  alertMapVisible=!alertMapVisible;
+  const mapDiv=document.getElementById('alert-mini-map');
+  if(alertMapVisible){
+    mapDiv.style.display='block';const s=currentAlertData;
+    if(!alertMapInst&&s&&s.lat&&s.lng){
+      setTimeout(()=>{
+        alertMapInst=L.map('alert-mini-map',{zoomControl:false,attributionControl:false}).setView([s.lat,s.lng],14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(alertMapInst);
+        const ri=L.divIcon({html:`<div style="background:#ff5252;width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 12px #ff5252"></div>`,iconSize:[16,16],iconAnchor:[8,8],className:''});
+        L.marker([s.lat,s.lng],{icon:ri}).addTo(alertMapInst).bindPopup(s.from).openPopup();
+        if(myLat&&myLng){
+          const gi=L.divIcon({html:`<div style="background:#69f0ae;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 8px #69f0ae"></div>`,iconSize:[12,12],iconAnchor:[6,6],className:''});
+          L.marker([myLat,myLng],{icon:gi}).addTo(alertMapInst);
+          alertMapInst.fitBounds([[s.lat,s.lng],[myLat,myLng]],{padding:[14,14]});
+        }
+      },80);
+    }else if(alertMapInst)alertMapInst.invalidateSize();
+  }else{mapDiv.style.display='none';}
+}
+
+function ackAlert(){
+  if(!currentAlertSignalId)return;
+  db.ref(`rooms/${myRoom}/signals/${currentAlertSignalId}/reads/${myId}`).set({name:myName+' '+myEmoji,ts:firebase.database.ServerValue.TIMESTAMP});
+  document.getElementById('alert-overlay').classList.remove('visible');
+  toast('✓ Recepción confirmada');
+  const s=currentAlertData;
+  if(s&&s.lat&&s.lng&&mainMap){centerMapOn(s.lat,s.lng);switchTab('map',0);}
+  alertMapInst=null;
+}
+
+function doCheckin(){
+  const now=new Date();const timeStr=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('last-checkin').textContent=timeStr;
+  db.ref(`rooms/${myRoom}/checkins/${myId}`).set({name:myName,emoji:myEmoji,time:timeStr,ts:firebase.database.ServerValue.TIMESTAMP});
+  sendSignal('✅ Estoy bien — Check-in '+timeStr);
+}
+
+function listenChat(){
+  db.ref(`rooms/${myRoom}/chat`).limitToLast(100).on('child_added',snap=>{appendChatMsg(snap.val());});
+}
+function appendChatMsg(m){
+  const div=document.getElementById('chat-messages');const mine=m.fromId===myId;
+  const el=document.createElement('div');el.className='msg '+(mine?'mine':'theirs');
+  const time=new Date(m.ts||Date.now()).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  el.innerHTML=`<div class="msg-bubble">${escapeHtml(m.text)}</div><div class="msg-meta">${!mine?`<span class="msg-sender">${m.emoji||''} ${m.from}</span>`:''}<span>${time}</span>${mine?'<span>✓</span>':''}</div>`;
+  div.appendChild(el);div.scrollTop=div.scrollHeight;
+  if(!mine&&activeTab!=='chat'){unreadChat++;showBadge('chat-badge',unreadChat);}
+}
+function sendChat(){
+  const inp=document.getElementById('chat-input');const text=inp.value.trim();if(!text)return;inp.value='';
+  db.ref(`rooms/${myRoom}/chat`).push({from:myName,fromId:myId,emoji:myEmoji,text,ts:firebase.database.ServerValue.TIMESTAMP});
+}
+
+function addToHistory(item){historyItems.unshift(item);if(historyItems.length>60)historyItems.pop();renderHistory();}
+function renderHistory(){
+  const list=document.getElementById('history-list');
+  if(!historyItems.length){list.innerHTML='<div class="hist-empty"><div class="he-icon">📭</div>Sin señales aún</div>';return;}
+  list.innerHTML='';
+  historyItems.forEach((item,idx)=>{
+    const time=new Date(item.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    const date=new Date(item.ts).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+    const distStr=item.dist!=null?(item.dist<1?Math.round(item.dist*1000)+'m':item.dist.toFixed(2)+'km'):'';
+    const el=document.createElement('div');el.className='hist-item';
+    el.innerHTML=`<div class="hi-emoji">${item.emoji||'👤'}</div><div class="hi-body"><div class="hi-from">${item.mine?'Yo':item.from}</div><div class="hi-msg">${item.message||'📡 Señal'}</div><div class="hi-meta"><span class="hi-time">${date} ${time}</span>${distStr?`<span class="hi-dist">${distStr}</span>`:''}</div></div>${item.lat?`<button class="btn-hist-map" onclick="goHistItem(${idx})">🗺</button>`:''}`;
+    list.appendChild(el);
+  });
+}
+function goHistItem(idx){const item=historyItems[idx];if(!item||!item.lat)return;centerMapOn(item.lat,item.lng);switchTab('map',0);}
+function clearHistory(){historyItems=[];renderHistory();}
+
+function openAddPlace(){
+  document.getElementById('place-name-inp').value='';
+  const gi=document.getElementById('place-gps-info');
+  if(myLat&&myLng){gi.textContent=`📡 ${myLat.toFixed(5)}, ${myLng.toFixed(5)}`;gi.style.color='var(--green)';}
+  else{gi.textContent='⚠ Sin GPS — activá la ubicación';gi.style.color='var(--warn)';}
+  document.getElementById('place-modal').classList.add('visible');
+}
+function closeAddPlace(){document.getElementById('place-modal').classList.remove('visible');}
+function savePlace(){
+  const name=document.getElementById('place-name-inp').value.trim();
+  if(!name)return toast('Ingresá un nombre');
+  if(!myLat||!myLng)return toast('Sin GPS disponible');
+  places.push({name,emoji:selectedPlaceEmoji,lat:myLat,lng:myLng});
+  localStorage.setItem('ft_places_'+myRoom,JSON.stringify(places));
+  closeAddPlace();renderPlaces();renderPlaceMarkersOnMap();toast('📍 '+name+' guardado');
+}
+function renderPlaces(){
+  const list=document.getElementById('places-list');
+  if(!places.length){list.innerHTML='<div class="hist-empty"><div class="he-icon">🗺</div>Guardá lugares como casa,<br>escuela o trabajo</div>';return;}
+  list.innerHTML='';
+  places.forEach((p,idx)=>{
+    const el=document.createElement('div');el.className='place-item';
+    el.innerHTML=`<div class="pi-icon">${p.emoji}</div><div class="pi-body"><div class="pi-name">${p.name}</div><div class="pi-coords">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div></div><button class="btn-go-place" onclick="goToPlace(${idx})">Ver</button><button class="btn-del-place" onclick="delPlace(${idx})">🗑</button>`;
+    list.appendChild(el);
+  });
+}
+function goToPlace(idx){const p=places[idx];centerMapOn(p.lat,p.lng);switchTab('map',0);}
+function delPlace(idx){places.splice(idx,1);localStorage.setItem('ft_places_'+myRoom,JSON.stringify(places));renderPlaces();renderPlaceMarkersOnMap();}
+function renderPlaceMarkersOnMap(){
+  if(!mainMap)return;placeMarkers.forEach(m=>mainMap.removeLayer(m));placeMarkers=[];
+  places.forEach(p=>{
+    const icon=L.divIcon({html:`<div style="font-size:18px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))">${p.emoji}</div>`,iconSize:[24,24],iconAnchor:[12,12],className:''});
+    const m=L.marker([p.lat,p.lng],{icon}).addTo(mainMap).bindPopup(p.name);placeMarkers.push(m);
+  });
+}
+
+function switchTab(tabName,idx){
+  activeTab=tabName;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+tabName).classList.add('active');
+  if(tabName==='chat'){unreadChat=0;hideBadge('chat-badge');setTimeout(()=>{document.getElementById('chat-messages').scrollTop=99999;},50);}
+  if(tabName==='history'){unreadHist=0;hideBadge('hist-badge');}
+  if(tabName==='map'&&mainMap)setTimeout(()=>mainMap.invalidateSize(),100);
+}
+function showBadge(id,n){const b=document.getElementById(id);b.style.display='flex';b.textContent=n;}
+function hideBadge(id){document.getElementById(id).style.display='none';}
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+window.addEventListener('load',()=>{
+  const n=localStorage.getItem('ft_name'),r=localStorage.getItem('ft_room'),
+        p=localStorage.getItem('ft_pass'),f=localStorage.getItem('ft_fb'),e=localStorage.getItem('ft_emoji');
+  if(n)document.getElementById('inp-name').value=n;
+  if(r)document.getElementById('inp-room').value=r;
+  if(p)document.getElementById('inp-pass').value=p;
+  if(f)document.getElementById('inp-fb').value=f;
+  if(e){selectedEmoji=e;document.querySelectorAll('#emoji-grid .emoji-btn').forEach(b=>b.classList.toggle('selected',b.textContent===e));}
+});
+
+// ========== PUSH NOTIFICATIONS (FCM) ==========
+const VAPID_KEY = 'BCmRJ9sMgiK7KPAmJoQT-BI960hSRpNLty3l9oGt2-HSD0xU3f4bG7OykkWzpV056nSh9X9lIWynWd6Ew4znZQE';
+let fcmToken = null;
+let messagingInstance = null;
+
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) {
+    console.log('Push notifications not supported');
+    return;
+  }
+
+  try {
+    // Register service worker
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('SW registered:', swReg);
+
+    // Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      toast('⚠️ Activá las notificaciones para recibir alertas');
+      return;
+    }
+
+    // Init Firebase Messaging (needs full firebase config)
+    // We use the database URL to extract project info
+    const fbUrl = localStorage.getItem('ft_fb') || '';
+    const projectId = fbUrl.replace('https://','').split('-default-rtdb')[0].split('.')[0];
+
+    if (!firebase.apps.find(a => a.name === 'messaging')) {
+      firebase.initializeApp({
+        apiKey: "AIzaSyPlaceholder",
+        authDomain: `${projectId}.firebaseapp.com`,
+        databaseURL: fbUrl,
+        projectId: projectId,
+        storageBucket: `${projectId}.appspot.com`,
+        messagingSenderId: "260737022822",
+        appId: "1:260737022822:web:placeholder"
+      }, 'messaging');
+    }
+
+    messagingInstance = firebase.messaging(firebase.app('messaging'));
+
+    // Get FCM token
+    fcmToken = await messagingInstance.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    if (fcmToken) {
+      // Save token to Firebase so others can send us notifications
+      if (db) {
+        db.ref(`rooms/${myRoom}/tokens/${myId}`).set({
+          token: fcmToken, name: myName, emoji: myEmoji, ts: Date.now()
+        });
+      }
+      console.log('FCM token saved');
+      toast('🔔 Notificaciones activadas');
+    }
+
+    // Handle foreground messages
+    messagingInstance.onMessage(payload => {
+      const { title, body } = payload.notification || {};
+      toast(`${title||'📡 Señal'}: ${body||''}`);
+    });
+
+  } catch(e) {
+    console.error('FCM error:', e);
+  }
+}
+
+// Send push notification to all room members via Firebase Function workaround
+// Since we can't call FCM directly from client, we write a trigger to Firebase
+// and use a lightweight approach: store pending notifications in DB
+async function sendPushToRoom(signalData) {
+  if (!db) return;
+  try {
+    // Get all FCM tokens in the room except mine
+    const snap = await db.ref(`rooms/${myRoom}/tokens`).once('value');
+    const tokensData = snap.val() || {};
+    const tokens = Object.entries(tokensData)
+      .filter(([id]) => id !== myId)
+      .map(([, t]) => t.token)
+      .filter(Boolean);
+
+    if (tokens.length === 0) return;
+
+    // Call Netlify Function to send push
+    await fetch('/.netlify/functions/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tokens,
+        title: `${myEmoji} ${myName} envió su ubicación`,
+        body: signalData.message || '📡 Tocá para ver en el mapa',
+        data: { room: myRoom, lat: String(myLat||''), lng: String(myLng||'') }
+      })
+    });
+  } catch(e) {
+    console.error('sendPushToRoom error:', e);
+  }
+}
+
+// Listen for push triggers from others (client-side relay)
+function listenPushQueue() {
+  if (!db) return;
+  let initialized = false;
+  db.ref(`rooms/${myRoom}/push_queue`).limitToLast(1).on('child_added', snap => {
+    if (!initialized) { initialized = true; return; } // skip existing
+    const n = snap.val();
+    if (!n || n.fromId === myId) return;
+    if ((Date.now() - n.ts) > 30000) return;
+    
+    // Show native browser notification
+    if (Notification.permission === 'granted') {
+      new Notification(n.title || '📡 FamiliaTrack', {
+        body: n.body || 'Nueva señal recibida',
+        icon: '🌿',
+        vibrate: [300, 100, 300],
+        tag: 'familiatrack-signal',
+        renotify: true
+      });
+    }
+  });
+}
+</script>
+</body>
+</html>
